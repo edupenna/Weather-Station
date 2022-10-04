@@ -1,0 +1,149 @@
+esphome:
+  name: wemosestacao
+  platform: ESP8266
+  board: d1
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+
+ota:
+
+
+wifi:
+  ssid: !secret wifi_ssid_cxsuite
+  password: !secret wifi_password_cxsuite
+  
+ # Optional manual IP
+ # manual_ip:
+ #   static_ip: 192.168.68.71
+ #   gateway: 192.168.68.1
+ #   subnet: 255.255.255.0    
+
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Wemosestacao Fallback Hotspot"
+    password: "maluzinha"
+
+captive_portal:
+
+# Servidor Web
+web_server:
+  port: 80
+
+
+i2c:
+  sda: GPIO4 #D14
+  scl: GPIO5 #D15
+  scan: true
+  id: bus_a
+
+sensor:
+  - platform: bme280
+    iir_filter: 16x
+    temperature:
+      name: "estacao_temperatura"
+      oversampling: 16x
+    pressure:
+      name: "estacao_pressao"
+      oversampling: 16x
+    humidity:
+      name: "estacao_umidade"
+      oversampling: 16x
+    address: 0x76
+    update_interval: 60s
+
+  - platform: bh1750
+    name: "estacao_luz"
+    address: 0x23
+    # measurement_duration: 69
+    update_interval: 60s
+    id: "sensor_luz"
+   
+    
+  - platform: pulse_counter
+    pin:
+      number: GPIO02 # D9
+      mode: INPUT_PULLUP
+    name: "estacao_pluviometro"
+    unit_of_measurement: "mm"
+    id: pluviometro
+    filters:
+     - multiply: 0.25
+     - debounce: 100ms
+    count_mode:
+      rising_edge: DISABLE
+      falling_edge: INCREMENT
+    update_interval: 60s
+  
+  - platform: integration
+    name: "Chuva Diaria"
+    id: chuvadia
+    sensor: pluviometro
+    accuracy_decimals: 1
+    time_unit: min
+    unit_of_measurement: "mm"
+    
+  - platform: pulse_counter
+    pin:
+      number: GPIO13 # D7
+      mode: INPUT_PULLUP
+    name: "estacao_anemometro"
+    count_mode:
+      rising_edge: DISABLE
+      falling_edge: INCREMENT
+    internal_filter: 1ms
+    update_interval: 1s
+    # RPM = pulses
+    # Perimeter (m) = 0.105 * 2 * 3.14 = 0.6594
+    # 0.039584Km/h * 5 segundos = 0.197935
+    unit_of_measurement: km/h
+    filters:
+      - multiply: 0.197935
+      - median:
+      - debounce: 50ms
+      - lambda: |-
+            float MIN_VALUE = 0.0;
+            float MAX_VALUE = 150.0;
+            if (MIN_VALUE <= x && x <= MAX_VALUE) return x;
+            else return {};
+
+  - platform: adc
+    pin: A0
+    name: "estacao_biruta"
+    update_interval: 5s
+    id: biruta
+    accuracy_decimals: 0
+    unit_of_measurement: "°"
+    filters:
+      - multiply: 360
+
+
+button:
+  - platform: restart
+    name: "Restart"
+
+light:
+  - platform: status_led
+    name: "Switch state"
+    id: led_placa
+    pin:
+      number: GPIO02    
+      inverted: true
+    internal: true      
+
+
+time:
+
+  - platform: homeassistant
+    on_time:
+      - seconds: 0
+        minutes: 00
+        hours: 0
+        then:
+          - sensor.integration.reset: chuvadia
+          - logger.log: "Reset chuva diária"
+       

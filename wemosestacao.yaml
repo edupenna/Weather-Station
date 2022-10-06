@@ -1,5 +1,3 @@
-#alteração 
-
 esphome:
   name: wemosestacao
   platform: ESP8266
